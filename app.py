@@ -2,7 +2,7 @@ import streamlit as st
 from pymongo import MongoClient
 import urllib.parse
 
-# Connect to MongoDB
+# --- MongoDB Connection ---
 username = st.secrets["mongodb"]["username"]
 password = urllib.parse.quote_plus(st.secrets["mongodb"]["password"])
 cluster = st.secrets["mongodb"]["cluster"]
@@ -12,12 +12,13 @@ ADMIN_USERNAME = st.secrets["mongodb"]["admin_username"]
 uri = f"mongodb+srv://{username}:{password}@{cluster}/?retryWrites=true&w=majority&appName={appname}"
 client = MongoClient(uri)
 
-db = client['ebooks']
-collection = db['book']
+db = client["ebooks"]
+collection = db["book"]
 
+# --- Page Title ---
 st.title("📚 E-Books Library")
 
-# Sidebar Login
+# --- Sidebar Login ---
 if "username" not in st.session_state:
     st.session_state["username"] = ""
 
@@ -28,7 +29,7 @@ with st.sidebar:
 username = st.session_state["username"] or "Guest"
 st.markdown(f"👤 Logged in as: **{username}**")
 
-# Admin Book Upload
+# --- Admin Upload Form ---
 if username == ADMIN_USERNAME:
     with st.expander("➕ Add New Book"):
         with st.form("add_book_form"):
@@ -37,25 +38,27 @@ if username == ADMIN_USERNAME:
             language = st.text_input("Language")
             domain = st.text_input("Domain")
             published_year = st.text_input("Published Year")
+            isbn = st.text_input("ISBN")
             link = st.text_input("Book Link (URL)")
             submit = st.form_submit_button("Add Book")
 
             if submit:
-                if title and author and language and domain and published_year and link:
+                if title and author and language and domain and published_year and isbn and link:
                     collection.insert_one({
                         "title": title,
                         "author": author,
                         "language": language,
                         "domain": domain,
                         "published_year": published_year,
+                        "isbn": isbn,
                         "link": link
                     })
                     st.success(f"✅ '{title}' has been added!")
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error("❌ All fields are required.")
 
-# Title Search with Autocomplete
+# --- Autocomplete Title Search ---
 all_books = list(collection.find({}, {"title": 1, "author": 1, "language": 1, "link": 1}))
 all_titles = sorted(set(book["title"] for book in all_books))
 
@@ -72,19 +75,20 @@ if title_search:
                 st.write(f"[📖 Open Book]({book.get('link','')})")
 
                 if username == ADMIN_USERNAME:
-                    if st.button(f"❌ Delete '{book['title']}'", key=str(book['_id'])):
+                    if st.button(f"❌ Delete '{book['title']}'", key=f"del-{str(book['_id'])}"):
                         collection.delete_one({"_id": book["_id"]})
                         st.success(f"'{book['title']}' deleted.")
-                        st.experimental_rerun()
+                        st.rerun()
     else:
         st.info("🔎 No titles found matching your input.")
 
-# Advanced Search
-with st.expander("⚙️ Advanced Search (Domain, Author, Language, Published Year)"):
+# --- Advanced Search ---
+with st.expander("⚙️ Advanced Search (Domain, Author, Language, Published Year, ISBN)"):
     domain_search = st.text_input("Domain")
     author_search = st.text_input("Author")
     language_search = st.text_input("Language")
     published_year_search = st.text_input("Published Year")
+    isbn_search = st.text_input("ISBN")
 
     if st.button("🔍 Search Advanced"):
         query = {}
@@ -96,6 +100,8 @@ with st.expander("⚙️ Advanced Search (Domain, Author, Language, Published Ye
             query["language"] = {"$regex": language_search.strip(), "$options": "i"}
         if published_year_search.strip():
             query["published_year"] = {"$regex": published_year_search.strip(), "$options": "i"}
+        if isbn_search.strip():
+            query["isbn"] = {"$regex": isbn_search.strip(), "$options": "i"}
 
         if query:
             results = list(collection.find(query))
@@ -105,16 +111,16 @@ with st.expander("⚙️ Advanced Search (Domain, Author, Language, Published Ye
                     st.markdown(
                         f"**{book['title']}** by *{book['author']}* "
                         f"({book['language']}) - Domain: {book.get('domain', 'N/A')} - "
-                        f"Published: {book.get('published_year', 'N/A')}"
+                        f"Year: {book.get('published_year', 'N/A')} - ISBN: {book.get('isbn', 'N/A')}"
                     )
                     st.write(f"[📘 Open Book]({book['link']})")
 
                     if username == ADMIN_USERNAME:
-                        if st.button(f"❌ Delete '{book['title']}'", key=str(book["_id"])):
+                        if st.button(f"❌ Delete '{book['title']}'", key=f"advdel-{str(book['_id'])}"):
                             collection.delete_one({"_id": book["_id"]})
                             st.success(f"'{book['title']}' deleted.")
-                            st.experimental_rerun()
+                            st.rerun()
             else:
                 st.warning("No books found matching the search.")
         else:
-            st.warning("Please enter at least one field.")
+            st.warning("Please enter at least one search field.")
